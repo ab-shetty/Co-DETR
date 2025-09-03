@@ -205,7 +205,7 @@ data = dict(
         pipeline=test_pipeline,
         classes=classes
     )
-
+)
 # optimizer
 optimizer = dict(
     type='AdamW',
