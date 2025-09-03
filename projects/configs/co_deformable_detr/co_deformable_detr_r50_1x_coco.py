@@ -229,6 +229,7 @@ model = dict(
 
 # train_pipeline, NOTE the img_scale and the Pad's size_divisor is different
 # from the default setting in mmdet.
+# train_pipeline
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
@@ -249,11 +250,10 @@ train_pipeline = [
             [
                 dict(
                     type='Resize',
-                    # The radio of all image in train dataset < 7
-                    # follow the original impl
                     img_scale=[(400, 4200), (500, 4200), (600, 4200)],
                     multiscale_mode='value',
                     keep_ratio=True),
+                # RandomCrop is optional, left commented out:
                 # dict(
                 #     type='RandomCrop',
                 #     crop_type='absolute_range',
@@ -274,9 +274,8 @@ train_pipeline = [
     dict(type='DefaultFormatBundle'),
     dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels'])
 ]
-# test_pipeline, NOTE the Pad's size_divisor is different from the default
-# setting (size_divisor=32). While there is little effect on the performance
-# whether we use the default setting or use size_divisor=1.
+
+# test_pipeline
 test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
@@ -286,15 +285,17 @@ test_pipeline = [
         transforms=[
             dict(type='Resize', keep_ratio=True),
             dict(type='Pad', size_divisor=1),
-            dict(type='ImageToTensor', keys=['img']),
+            dict(type='DefaultFormatBundle'),
             dict(type='Collect', keys=['img'])
         ])
 ]
+
 
 data = dict(
     samples_per_gpu=2,
     workers_per_gpu=2,
     train=dict(
+        _delete_=True,
         type='CocoDataset',
         ann_file='/kaggle/input/organizeddatasetbw/train/train_revamp.json',
         img_prefix='/kaggle/input/organizeddatasetbw/train/images/',
@@ -302,6 +303,7 @@ data = dict(
         classes=classes
     ),
     val=dict(
+        _delete_=True,
         type='CocoDataset',
         ann_file='/kaggle/input/organizeddatasetbw/val/val_revamp.json',
         img_prefix='/kaggle/input/organizeddatasetbw/val/images/',
