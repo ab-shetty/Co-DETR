@@ -4,6 +4,9 @@ _base_ = [
 # model settings
 num_dec_layer = 6
 lambda_2 = 2.0
+dataset_type = 'CocoDataset'
+classes = ('rooms',)
+data_root =""
 
 model = dict(
     roi_head=[dict(
@@ -19,7 +22,7 @@ model = dict(
             in_channels=256,
             fc_out_channels=1024,
             roi_feat_size=7,
-            num_classes=80,
+            num_classes=1,
             bbox_coder=dict(
                 type='DeltaXYWHBBoxCoder',
                 target_means=[0., 0., 0., 0.],
@@ -40,7 +43,7 @@ model = dict(
             num_convs=4,
             in_channels=256,
             conv_out_channels=256,
-            num_classes=80,
+            num_classes=1,
             loss_mask=dict(
                 type='CrossEntropyLoss', use_mask=True, loss_weight=1.0*num_dec_layer*lambda_2)),
             )],
@@ -120,13 +123,11 @@ model = dict(
         # e.g., nms=dict(type='soft_nms', iou_threshold=0.5, min_score=0.05)
     ])
 
-img_norm_cfg = dict(
-    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 # train_pipeline, NOTE the img_scale and the Pad's size_divisor is different
 # from the default setting in mmdet.
 train_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(type='LoadAnnotations', with_bbox=True, with_mask=True),
+    dict(type='LoadAnnotations', with_bbox=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(
         type='AutoAugment',
@@ -144,16 +145,15 @@ train_pipeline = [
             [
                 dict(
                     type='Resize',
-                    # The radio of all image in train dataset < 7
-                    # follow the original impl
                     img_scale=[(400, 4200), (500, 4200), (600, 4200)],
                     multiscale_mode='value',
                     keep_ratio=True),
-                dict(
-                    type='RandomCrop',
-                    crop_type='absolute_range',
-                    crop_size=(384, 600),
-                    allow_negative_crop=True),
+                # RandomCrop is optional, left commented out:
+                # dict(
+                #     type='RandomCrop',
+                #     crop_type='absolute_range',
+                #     crop_size=(384, 600),
+                #     allow_negative_crop=True),
                 dict(
                     type='Resize',
                     img_scale=[(480, 1333), (512, 1333), (544, 1333),
@@ -165,14 +165,12 @@ train_pipeline = [
                     keep_ratio=True)
             ]
         ]),
-    dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=1),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels', 'gt_masks'])
+    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels'])
 ]
-# test_pipeline, NOTE the Pad's size_divisor is different from the default
-# setting (size_divisor=32). While there is little effect on the performance
-# whether we use the default setting or use size_divisor=1.
+
+# test_pipeline
 test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
@@ -181,17 +179,46 @@ test_pipeline = [
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
-            dict(type='RandomFlip'),
-            dict(type='Normalize', **img_norm_cfg),
             dict(type='Pad', size_divisor=1),
-            dict(type='ImageToTensor', keys=['img']),
+            dict(type='DefaultFormatBundle'),
             dict(type='Collect', keys=['img'])
         ])
 ]
 
+
 data = dict(
     samples_per_gpu=2,
     workers_per_gpu=2,
-    train=dict(filter_empty_gt=False, pipeline=train_pipeline),
-    val=dict(pipeline=test_pipeline),
-    test=dict(pipeline=test_pipeline))
+    train=dict(
+        _delete_=True,
+        type='CocoDataset',
+        ann_file='/kaggle/input/organizeddatasetbw/train/train_revamp.json',
+        img_prefix='/kaggle/input/organizeddatasetbw/train/images/',
+        pipeline=train_pipeline,
+        classes=classes
+    ),
+    val=dict(
+        _delete_=True,
+        type='CocoDataset',
+        ann_file='/kaggle/input/organizeddatasetbw/val/val_revamp.json',
+        img_prefix='/kaggle/input/organizeddatasetbw/val/images/',
+        pipeline=test_pipeline,
+        classes=classes
+    )
+
+# optimizer
+optimizer = dict(
+    type='AdamW',
+    lr=2e-4,
+    weight_decay=1e-4,
+    paramwise_cfg=dict(
+        custom_keys={
+            'backbone': dict(lr_mult=0.1),
+            'sampling_offsets': dict(lr_mult=0.1),
+            'reference_points': dict(lr_mult=0.1)
+        }))
+optimizer_config = dict(grad_clip=dict(max_norm=0.1, norm_type=2))
+# learning policy
+lr_config = dict(policy='step', step=[11])
+runner = dict(type='EpochBasedRunner', max_epochs=36)
+work_dir = '/kaggle/temp/models/'
